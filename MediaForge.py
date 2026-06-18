@@ -43,7 +43,9 @@ class RoundedButton(tk.Canvas):
         self.normal_bg = bg
         self.hover_bg = hover_bg
         self.fg = fg
+        self.current_bg = self.normal_bg
         self._draw(self.normal_bg)
+        self.bind("<Configure>", lambda _event: self._draw(self.current_bg))
         self.bind("<Enter>", lambda _event: self._draw(self.hover_bg))
         self.bind("<Leave>", lambda _event: self._draw(self.normal_bg))
         self.bind("<Button-1>", self._click)
@@ -58,9 +60,10 @@ class RoundedButton(tk.Canvas):
             self.command()
 
     def _draw(self, fill: str) -> None:
+        self.current_bg = fill
         self.delete("all")
-        width = int(self["width"])
-        height = int(self["height"])
+        width = max(1, self.winfo_width())
+        height = max(1, self.winfo_height())
         r = min(self.radius, height // 2, width // 2)
         self.create_arc(0, 0, r * 2, r * 2, start=90, extent=90, fill=fill, outline=fill)
         self.create_arc(width - r * 2, 0, width, r * 2, start=0, extent=90, fill=fill, outline=fill)
@@ -184,30 +187,45 @@ class MediaForgeApp(tk.Tk):
         style.configure("Section.TLabel", background="#12131a", foreground="#6366ff", font=("Segoe UI", 9, "bold"))
         style.configure("Hint.TLabel", background="#191b24", foreground="#8588aa", font=("Segoe UI", 8, "italic"))
         style.configure("Ok.TLabel", background="#12131a", foreground="#64dc96")
+        style.configure("Connect.TLabel", background="#191b24", foreground="#ffffff")
+        style.configure("Connected.TLabel", background="#191b24", foreground="#64dc96")
         style.configure("Rail.TLabel", background="#12131a", foreground="#9093c0")
         style.configure("TButton", background="#2f3342", foreground="#f4f4f8", borderwidth=0, padding=(10, 6))
         style.map("TButton", background=[("active", "#3b4054")])
-        style.configure("Connect.TButton", background="#191b24", foreground="#64dc96", borderwidth=0, padding=(2, 2))
-        style.map("Connect.TButton", background=[("active", "#242634")])
         style.configure("Accent.TButton", background="#6366f1", foreground="#ffffff")
         style.map("Accent.TButton", background=[("active", "#7477ff")])
         style.configure("TEntry", fieldbackground="#20222c", foreground="#f4f4f8", insertcolor="#ffffff")
         style.configure("Treeview", background="#181a22", foreground="#e5e7eb", fieldbackground="#181a22", borderwidth=0, rowheight=28)
         style.configure("Treeview.Heading", background="#252837", foreground="#b8bbca", borderwidth=0)
         style.map("Treeview", background=[("selected", "#3f4370")])
-        style.configure("TRadiobutton", background="#12131a", foreground="#e8e8ee")
-        style.configure("TCheckbutton", background="#12131a", foreground="#e8e8ee")
+        style.configure("TRadiobutton", background="#12131a", foreground="#e8e8ee", indicatorcolor="#e8e8ee")
+        style.configure("TCheckbutton", background="#12131a", foreground="#e8e8ee", indicatorcolor="#e8e8ee")
+        style.configure("Panel.TCheckbutton", background="#191b24", foreground="#e8e8ee", indicatorcolor="#e8e8ee")
+        style.map(
+            "TRadiobutton",
+            background=[("active", "#12131a"), ("pressed", "#12131a"), ("selected", "#12131a")],
+            foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("selected", "#ffffff")],
+            indicatorcolor=[("selected", "#6366f1"), ("active", "#e8e8ee")],
+        )
+        style.map(
+            "TCheckbutton",
+            background=[("active", "#12131a"), ("pressed", "#12131a"), ("selected", "#12131a")],
+            foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("selected", "#ffffff")],
+            indicatorcolor=[("selected", "#6366f1"), ("active", "#e8e8ee")],
+        )
+        style.map(
+            "Panel.TCheckbutton",
+            background=[("active", "#191b24"), ("pressed", "#191b24"), ("selected", "#191b24")],
+            foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("selected", "#ffffff")],
+            indicatorcolor=[("selected", "#6366f1"), ("active", "#e8e8ee")],
+        )
 
     def _build(self) -> None:
         connect = ttk.Frame(self, style="Header.TFrame", padding=(14, 8, 14, 8))
         connect.pack(fill="x")
-        self.connect_button = self.rounded_button(
-            connect,
-            text=self.connect_status.get(),
-            command=self.open_connect_popup,
-            width=150,
-        )
-        self.connect_button.pack(side="left")
+        self.connect_label = ttk.Label(connect, textvariable=self.connect_status, style="Connect.TLabel", cursor="hand2")
+        self.connect_label.pack(side="left")
+        self.connect_label.bind("<Button-1>", lambda _event: self.open_connect_popup())
 
         top = ttk.Frame(self, style="Header.TFrame", padding=(14, 12, 14, 12))
         top.pack(fill="x")
@@ -317,13 +335,13 @@ class MediaForgeApp(tk.Tk):
             ttk.Label(self.options, text="(used only when S##E## not in filename)", style="Hint.TLabel").grid(row=2, column=4, sticky="w", pady=(14, 0))
             ttk.Label(self.options, text="Extensions:", style="Panel.TLabel").grid(row=2, column=5, sticky="e", pady=(14, 0), padx=(0, 8))
             ttk.Entry(self.options, textvariable=self.exts, width=20).grid(row=2, column=6, sticky="ew", pady=(14, 0))
-            ttk.Checkbutton(self.options, text="Include show name in filename", variable=self.include_show).grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
-            ttk.Checkbutton(self.options, text="Rename in Place", variable=self.rename_in_place).grid(row=3, column=2, columnspan=2, sticky="w", pady=(12, 0))
+            ttk.Checkbutton(self.options, text="Include show name in filename", variable=self.include_show, style="Panel.TCheckbutton").grid(row=3, column=0, columnspan=2, sticky="w", pady=(12, 0))
+            ttk.Checkbutton(self.options, text="Rename in Place", variable=self.rename_in_place, style="Panel.TCheckbutton").grid(row=3, column=2, columnspan=2, sticky="w", pady=(12, 0))
             self.options.columnconfigure(1, weight=1)
             self.options.columnconfigure(4, weight=1)
         elif mode == "movie":
             ttk.Label(self.options, text="MOVIE OPTIONS", style="Section.TLabel").pack(side="left", padx=(0, 20))
-            ttk.Checkbutton(self.options, text="Rename in Place", variable=self.rename_in_place).pack(side="left")
+            ttk.Checkbutton(self.options, text="Rename in Place", variable=self.rename_in_place, style="Panel.TCheckbutton").pack(side="left")
             ttk.Label(self.options, text="Extensions:", style="Panel.TLabel").pack(side="right", padx=(10, 6))
             ttk.Entry(self.options, textvariable=self.exts, width=24).pack(side="right")
         else:
@@ -342,8 +360,8 @@ class MediaForgeApp(tk.Tk):
 
     def update_connect_status(self) -> None:
         self.connect_status.set("✓ TMDB Connected" if self.tmdb_key.get().strip() else "Connect")
-        if hasattr(self, "connect_button"):
-            self.connect_button.set_text(self.connect_status.get())
+        if hasattr(self, "connect_label"):
+            self.connect_label.configure(style="Connected.TLabel" if self.tmdb_key.get().strip() else "Connect.TLabel")
 
     def open_connect_popup(self) -> None:
         self.open_settings(focus_key=not bool(self.tmdb_key.get().strip()))
