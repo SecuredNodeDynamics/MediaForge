@@ -11,6 +11,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,6 +40,29 @@ def config_dir() -> Path:
 
 def config_path() -> Path:
     return config_dir() / "config.json"
+
+
+def app_root() -> Path:
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+
+
+def is_usable_executable(path: Path) -> bool:
+    if not path.exists() or not path.is_file():
+        return False
+    if platform.system() != "Windows" and path.suffix.lower() == ".exe":
+        return False
+    return os.access(path, os.X_OK) or platform.system() == "Windows"
+
+
+def bundled_ffmpeg_candidates() -> list[Path]:
+    names = ("ffmpeg.exe",) if platform.system() == "Windows" else ("ffmpeg",)
+    roots = [
+        app_root() / "ffmpeg" / "bin",
+        app_root() / "ffmpeg",
+        Path(__file__).resolve().parent / "ffmpeg" / "bin",
+        Path(__file__).resolve().parent / "ffmpeg",
+    ]
+    return [root / name for root in roots for name in names]
 
 
 def load_config() -> dict[str, str]:
@@ -268,6 +292,16 @@ def find_show_match(client: MetadataClient, path: Path) -> dict[str, Any] | None
     return None
 
 
+def normalize_tmdb_show(item: dict[str, Any]) -> dict[str, Any]:
+    title = item.get("name") or item.get("original_name") or ""
+    return {
+        "id": int(item.get("id") or 0),
+        "title": title,
+        "year": year_from(item.get("first_air_date")),
+        "source": "TMDB",
+    }
+
+
 def movie_plans(client: MetadataClient, files: list[Path], rename_in_place: bool) -> list[Plan]:
     plans = []
     for path in files:
@@ -296,11 +330,12 @@ def tv_plans(
     include_show_name: bool,
     rename_in_place: bool,
     manual_override: bool,
+    selected_show: dict[str, Any] | None = None,
 ) -> list[Plan]:
     plans = []
     counters: dict[tuple[str, int], int] = {}
     for path in files:
-        match = find_show_match(client, path)
+        match = selected_show or find_show_match(client, path)
         if not match:
             print(f"unmatched: {path}")
             continue
@@ -347,19 +382,33 @@ def apply_plans(plans: list[Plan], dry_run: bool) -> None:
 
 def ffprobe_path(ffmpeg: str = "") -> str:
     configured = Path(ffmpeg).expanduser() if ffmpeg else None
-    if configured and configured.exists():
-        for name in ("ffprobe", "ffprobe.exe"):
+    if configured and is_usable_executable(configured):
+        names = ("ffprobe.exe",) if platform.system() == "Windows" else ("ffprobe",)
+        for name in names:
             sibling = configured.with_name(name)
-            if sibling.exists():
+            if is_usable_executable(sibling):
                 return str(sibling)
-    found = shutil.which("ffprobe") or shutil.which("ffprobe.exe")
+    bundled_ffmpeg = ffmpeg_path("")
+    if bundled_ffmpeg:
+        names = ("ffprobe.exe",) if platform.system() == "Windows" else ("ffprobe",)
+        for name in names:
+            sibling = Path(bundled_ffmpeg).with_name(name)
+            if is_usable_executable(sibling):
+                return str(sibling)
+    found = shutil.which("ffprobe.exe") if platform.system() == "Windows" else shutil.which("ffprobe")
     return found or ""
 
 
 def ffmpeg_path(configured: str = "") -> str:
-    if configured and Path(configured).expanduser().exists():
-        return str(Path(configured).expanduser())
-    return shutil.which("ffmpeg") or shutil.which("ffmpeg.exe") or ""
+    if configured:
+        configured_path = Path(configured).expanduser()
+        if is_usable_executable(configured_path):
+            return str(configured_path)
+    for candidate in bundled_ffmpeg_candidates():
+        if is_usable_executable(candidate):
+            return str(candidate)
+    found = shutil.which("ffmpeg.exe") if platform.system() == "Windows" else shutil.which("ffmpeg")
+    return found or ""
 
 
 def audio_info(path: Path, probe: str) -> dict[str, Any]:

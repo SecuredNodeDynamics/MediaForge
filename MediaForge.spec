@@ -1,10 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import shutil
+
+ffmpeg_binaries = []
+ffmpeg_path = shutil.which('ffmpeg')
+ffprobe_path = shutil.which('ffprobe')
+if ffmpeg_path and ffprobe_path:
+    ffmpeg_binaries = [
+        (ffmpeg_path, 'ffmpeg/bin'),
+        (ffprobe_path, 'ffmpeg/bin'),
+    ]
+
 
 a = Analysis(
     ['MediaForge.py'],
     pathex=[],
-    binaries=[],
+    binaries=ffmpeg_binaries,
     datas=[('static', 'static')],
     hiddenimports=[],
     hookspath=[],
